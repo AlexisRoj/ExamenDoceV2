@@ -1,9 +1,11 @@
 package com.innovagenesis.aplicaciones.android.examendocev2;
 
 import android.content.Intent;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
 import android.widget.TextView;
 
 import com.facebook.CallbackManager;
@@ -15,13 +17,18 @@ import com.facebook.Profile;
 import com.facebook.ProfileTracker;
 import com.facebook.login.LoginResult;
 import com.facebook.login.widget.LoginButton;
+import com.google.android.gms.auth.api.Auth;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.auth.api.signin.GoogleSignInResult;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.Arrays;
-
-public class MainActivity extends AppCompatActivity implements FacebookCallback<LoginResult> {
+public class MainActivity extends AppCompatActivity implements FacebookCallback<LoginResult>,
+        View.OnClickListener, GoogleApiClient.OnConnectionFailedListener {
 
     public static final String TAG = MainActivity.class.getSimpleName();
 
@@ -29,7 +36,8 @@ public class MainActivity extends AppCompatActivity implements FacebookCallback<
     private CallbackManager callbackManager;
     private ProfileTracker profileTracker;
     private TextView textLogin;
-
+    private GoogleApiClient mGoogleApiClient;
+    public static final int SIGN_IN_GOOGLE_REQUEST_CODE = 1;
 
 
     @Override
@@ -39,35 +47,57 @@ public class MainActivity extends AppCompatActivity implements FacebookCallback<
 
         callbackManager = CallbackManager.Factory.create();
         loginButton = (LoginButton) findViewById(R.id.login_button);
-
+        //Asi se piden los privilegios con un arrayList
         /*loginButton.setReadPermissions(Arrays.asList(
                 "public_profile", "email", "user_birthday", "user_friends"));*/
-
         loginButton.setReadPermissions("email");
 
+        textLogin = (TextView) findViewById(R.id.txtview_email);
 
-        textLogin = (TextView)findViewById(R.id.txtview_email);
+        findViewById(R.id.sign_in_button).setOnClickListener(this);
 
-
-        loginButton.registerCallback(callbackManager,this);
-
+        loginButton.registerCallback(callbackManager, this);
         ProfileTracker profileTracker = new ProfileTracker() {
             @Override
             protected void onCurrentProfileChanged(Profile oldProfile, Profile currentProfile) {
-                if (currentProfile!= null){
+                if (currentProfile != null) {
                     //textLogin.setText(currentProfile.getName());
                 }
             }
         };
-
         profileTracker.startTracking();
+
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .build();
+
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .enableAutoManage(this, this)
+                .addApi(Auth.GOOGLE_SIGN_IN_API, gso)
+                .build();
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        callbackManager.onActivityResult(requestCode,resultCode,data);
+        if (requestCode == SIGN_IN_GOOGLE_REQUEST_CODE){
+            GoogleSignInResult result = Auth.GoogleSignInApi.getSignInResultFromIntent(data);
+            handleSignInResult(result);
+        }else{
+            callbackManager.onActivityResult(requestCode, resultCode, data);
+        }
     }
+
+    private void handleSignInResult(GoogleSignInResult result) {
+        Log.d(TAG,"handleSignInResult: "+result.isSuccess());
+        if (result.isSuccess()){
+            GoogleSignInAccount account = result.getSignInAccount();
+            if (account!= null){
+                textLogin.setText(account.getEmail());
+            }
+        }
+    }
+
 
     @Override
     protected void onDestroy() {
@@ -75,10 +105,12 @@ public class MainActivity extends AppCompatActivity implements FacebookCallback<
         profileTracker.stopTracking();
     }
 
+    /**
+     * Encargado de
+     */
     @Override
     public void onSuccess(LoginResult loginResult) {
 
-        // App code
         GraphRequest request = GraphRequest.newMeRequest(
                 loginResult.getAccessToken(),
                 new GraphRequest.GraphJSONObjectCallback() {
@@ -104,8 +136,6 @@ public class MainActivity extends AppCompatActivity implements FacebookCallback<
         request.setParameters(parameters);
         request.executeAsync();
 
-
-
         Log.i(TAG, "onSuccess: " + loginResult.getAccessToken());
     }
 
@@ -117,5 +147,30 @@ public class MainActivity extends AppCompatActivity implements FacebookCallback<
     @Override
     public void onError(FacebookException error) {
         Log.i(TAG, "onError: " + error.getMessage());
+    }
+
+    @Override
+    public void onClick(View v) {
+        switch (v.getId()) {
+
+            case R.id.sign_in_button:
+                inicioSeccion();
+                break;
+
+        }
+    }
+
+    /**
+     * Metodo de inicio de seccion
+     */
+    private void inicioSeccion() {
+        Intent signIntent = Auth.GoogleSignInApi.getSignInIntent(mGoogleApiClient);
+        startActivityForResult(signIntent, SIGN_IN_GOOGLE_REQUEST_CODE);
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        Log.v(TAG, "onConnectionFailed: Error conectando cuenta Google, " +
+                connectionResult.getErrorMessage());
     }
 }
